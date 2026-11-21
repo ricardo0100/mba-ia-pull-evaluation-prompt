@@ -352,3 +352,74 @@ Rode uma vez e guarde o endereço: ao compartilhar de novo, o link muda.
 - Não altere os datasets de avaliação - apenas os prompts em prompts/bug_to_user_story_v2.yml
 - Itere, itere, itere - é normal precisar de 3-5 iterações para atingir 0.8 em todas as métricas
 - Documente seu processo - a jornada de otimização é tão importante quanto o resultado final
+
+## Técnicas Aplicadas (Fase 2)
+
+O prompt otimizado está em [`prompts/bug_to_user_story_v2.yml`](prompts/bug_to_user_story_v2.yml) e foi publicado como `rrghkf/bug_to_user_story_v2`. Ele aplica duas técnicas, declaradas em `techniques_applied`: **Few-shot Learning** e **Chain of Thought**.
+
+### Ponto de partida: o que faltava na v1
+
+Antes de mudar o prompt, publiquei o conteúdo da v1 como v2 e rodei a avaliação para ter uma linha de base (experimento `rrghkf-bug_to_user_story_v2-8dd5322a`):
+
+| Métrica | v1 (linha de base) |
+|---|---|
+| Helpfulness | 0.94 |
+| Correctness | 0.84 |
+| F1-Score | **0.75** ✗ |
+| Clarity | 0.95 |
+| Precision | 0.93 |
+
+As respostas da v1 eram corretas, mas incompletas. Os comentários do avaliador apontam baixo *recall*: o modelo escrevia só a frase "Como... eu quero... para que..." e omitia os **Critérios de Aceitação** e o **Contexto Técnico** (endpoints, códigos HTTP, logs) que as respostas de referência trazem. A v1 também tinha dois problemas de estrutura:
+- não dizia qual formato usar;
+- enviava o `{bug_report}` duas vezes, no system e no user prompt.
+
+### 1. Few-shot Learning
+
+**Por que escolhi:** o principal problema da v1 era o formato da resposta, não o entendimento do bug. Mostrar exemplos de entrada e saída é a forma mais direta de ensinar ao modelo quais seções a resposta deve ter e em que formato: User Story, Critérios de Aceitação em Dado/Quando/Então e Contexto Técnico.
+
+**Como apliquei:** o system prompt traz 2 exemplos escritos à mão, com bugs que **não estão no dataset de avaliação**, para não vazar o gabarito:
+
+- **Exemplo 1 (simples):** o link "Esqueci minha senha" não funciona. A saída mostra só a User Story e os Critérios de Aceitação, porque o relato não tem detalhes técnicos.
+- **Exemplo 2 (médio):** a exportação de CSV falha com `HTTP 504` em `GET /api/reports/orders/export`. A saída mostra também a seção "Contexto Técnico" com o endpoint e o erro.
+
+Trecho do exemplo 2:
+
+```
+Critérios de Aceitação:
+- Dado que selecionei um período maior que 30 dias
+- Quando clico em "Exportar CSV"
+- Então o arquivo deve ser gerado sem erro
+- E o endpoint não deve retornar HTTP 504
+- E o CSV deve conter todos os pedidos do período
+
+Contexto Técnico:
+- Endpoint: GET /api/reports/orders/export
+- Erro atual: HTTP 504 após 60 segundos
+```
+
+Os dois exemplos mostram ao modelo quando incluir o Contexto Técnico: só quando o relato traz detalhes técnicos.
+
+### 2. Chain of Thought (CoT)
+
+**Por que escolhi:** transformar um bug em User Story exige analisar o relato antes de escrever. É preciso descobrir quem é afetado, qual capacidade está quebrada e quais detalhes precisam virar critério. Sem esse passo, a v1 resumia o bug numa frase e perdia informação. O CoT faz o modelo extrair esses elementos antes de escrever a resposta.
+
+**Como apliquei:** o system prompt pede um raciocínio em 4 passos, feito **sem aparecer na resposta**. Assim a saída continua limpa para o avaliador e para quem lê:
+
+```
+Antes de responder, pense passo a passo (sem escrever esse raciocínio na resposta):
+1. Quem é afetado pelo bug?
+2. O que essa pessoa quer conseguir fazer e por quê?
+3. Quais detalhes do relato precisam aparecer nos critérios (telas, endpoints, erros, números)?
+4. Quais critérios de aceitação provam que o problema foi resolvido?
+```
+
+Cada passo corresponde a uma parte da resposta:
+- passos 1 e 2: a frase "Como [persona], eu quero [ação], para que [benefício]";
+- passo 3: o Contexto Técnico e os detalhes concretos dos critérios;
+- passo 4: os Critérios de Aceitação.
+
+### Outros ajustes
+
+- **System vs. User prompt:** as instruções e os exemplos ficam no system prompt. O user prompt traz só o relato (`Relato de bug:\n{bug_report}\n\nResposta:`), o que acaba com a duplicação da v1.
+- **Formato explícito:** o prompt pede "apenas a User Story" no formato descrito, para evitar textos como "Aqui está uma user story...".
+- **Mudanças pequenas de propósito:** esta versão muda pouco em relação à v1, para isolar o efeito das duas técnicas. Uma versão anterior, com persona detalhada, esqueletos por complexidade e 3 exemplos, foi descartada para manter o prompt simples.
