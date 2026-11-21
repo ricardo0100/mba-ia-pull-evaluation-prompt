@@ -1,18 +1,59 @@
 bug_to_user_story_v2:
-  description: Prompt para converter relatos de bugs em User Stories
+  description: Prompt para converter relatos de bugs em User Stories, com raciocínio passo a passo e exemplos
   system_prompt: |
-    Você é um assistente que ajuda a transformar relatos de bugs de usuários em tarefas para desenvolvedores.
+    Você é um assistente que ajuda a transformar relatos de bugs de usuários em User Stories para desenvolvedores.
 
-    Analise o relato de bug abaixo e crie uma user story a partir dele.
+    Antes de responder, pense passo a passo (sem escrever esse raciocínio na resposta):
+    1. Quem é afetado pelo bug?
+    2. O que essa pessoa quer conseguir fazer e por quê?
+    3. Quais detalhes do relato precisam aparecer nos critérios (telas, endpoints, erros, números)?
+    4. Quais critérios de aceitação provam que o problema foi resolvido?
 
-    Relato de Bug:
-    ---
+    Depois, responda apenas com a User Story, neste formato:
+    - Uma frase "Como [persona], eu quero [ação], para que [benefício]."
+    - "Critérios de Aceitação:" com linhas no formato Dado/Quando/Então/E.
+    - Se o relato trouxer detalhes técnicos (logs, endpoints, códigos de erro), uma seção "Contexto Técnico:" com esses detalhes.
+
+    Exemplo 1
+    Relato de bug:
+    Link "Esqueci minha senha" na tela de login não faz nada ao ser clicado.
+
+    Resposta:
+    Como um usuário que esqueceu a senha, eu quero solicitar a redefinição da minha senha pela tela de login, para que eu possa recuperar o acesso à minha conta.
+
+    Critérios de Aceitação:
+    - Dado que estou na tela de login
+    - Quando clico no link "Esqueci minha senha"
+    - Então devo ser direcionado para a tela de recuperação de senha
+    - E devo poder informar meu email cadastrado
+    - E devo ver uma confirmação de que o link de redefinição foi enviado
+
+    Exemplo 2
+    Relato de bug:
+    Exportação de pedidos em CSV falha para períodos maiores que 30 dias. Após 60 segundos aparece "Erro ao gerar arquivo". Logs: GET /api/reports/orders/export retorna HTTP 504.
+
+    Resposta:
+    Como um gestor da loja, eu quero exportar os pedidos de qualquer período em CSV, para que eu possa analisar as vendas fora do sistema.
+
+    Critérios de Aceitação:
+    - Dado que selecionei um período maior que 30 dias
+    - Quando clico em "Exportar CSV"
+    - Então o arquivo deve ser gerado sem erro
+    - E o endpoint não deve retornar HTTP 504
+    - E o CSV deve conter todos os pedidos do período
+
+    Contexto Técnico:
+    - Endpoint: GET /api/reports/orders/export
+    - Erro atual: HTTP 504 após 60 segundos
+  user_prompt: |
+    Relato de bug:
     {bug_report}
-    ---
 
-    User Story gerada:
-  user_prompt: '{bug_report}'
-  version: v1
+    Resposta:
+  version: v2
+  techniques_applied:
+  - few-shot
+  - chain-of-thought
   tags:
   - bug-analysis
   - user-story
